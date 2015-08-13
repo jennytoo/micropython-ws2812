@@ -39,10 +39,18 @@ class WS2812:
         self.buf = bytearray(self.buf_length)
 
         # SPI init
-        self.spi = pyb.SPI(spi_bus, pyb.SPI.MASTER, baudrate=3200000, polarity=0, phase=1)
+        self.spi = pyb.SPI(spi_bus, pyb.SPI.MASTER, baudrate=3200000, polarity=0, phase=0)
 
         # turn LEDs off
         self.show([])
+
+    @property
+    def intensity(self):
+        return float(self._intensity) / 256
+
+    @intensity.setter
+    def intensity(self, value):
+        self._intensity = int(min(1, value)*256+0.5)
 
     def show(self, data):
         """
@@ -60,6 +68,7 @@ class WS2812:
         self.spi.send(self.buf)
         gc.collect()
 
+    @micropython.native
     def update_buf(self, data, start=0):
         """
         Fill a part of the buffer with RGB data.
@@ -76,14 +85,14 @@ class WS2812:
 
         buf = self.buf
         buf_bytes = self.buf_bytes
-        intensity = self.intensity
+        intensity = self._intensity
 
         mask = 0x03
         index = start * 12
         for red, green, blue in data:
-            red = int(red * intensity)
-            green = int(green * intensity)
-            blue = int(blue * intensity)
+            red = (red * intensity) >> 8
+            green = (green * intensity) >> 8
+            blue = (blue * intensity) >> 8
 
             buf[index] = buf_bytes[green >> 6 & mask]
             buf[index+1] = buf_bytes[green >> 4 & mask]
