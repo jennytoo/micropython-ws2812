@@ -45,7 +45,7 @@ class WS2812(object):
         self.work_buf_length = self.led_count * 3
         self.work_buf = array('B', (0 for _ in range(self.work_buf_length)))
 
-        # red, green, blue relative offsets, then led -> base index map
+        # r, g, b relative offsets, then led -> base offset for each led
         self.buffer_map = array('H', [0, 1, 2] + [i*3 for i in range(self.led_count)])
 
         # SPI init
@@ -142,8 +142,7 @@ class WS2812(object):
         """
         Copy the buffer directly into the intermediate work buffer.
 
-        bufmap contains is contains both the relative color position and the
-        offset for each led.
+        bufmap contains the relative color position and the offset for each led.
 
           array('H', [
             red offset,
