@@ -45,6 +45,9 @@ class WS2812(object):
         self.work_buf_length = self.led_count * 3
         self.work_buf = array('B', (0 for _ in range(self.work_buf_length)))
 
+        # red, green, blue relative offsets, then led -> base index map
+        self.buffer_map = array('H', [0, 1, 2] + [i*3 for i in range(self.led_count)])
+
         # SPI init
         self.spi = pyb.SPI(spi_bus, pyb.SPI.MASTER, baudrate=3200000, polarity=0, phase=0)
 
@@ -115,14 +118,73 @@ class WS2812(object):
         self.spi.send(self.buf)
         gc.collect()
 
+    def set_buffer_map(self, data, r_offset=0, g_offset=1, b_offset=2):
+        """
+        Set a buffer map pointing to buffer offsets.
+
+        Needs to have one entry per LED
+        """
+        buffer_map = self.buffer_map
+        buffer_map[0] = r_offset
+        buffer_map[1] = g_offset
+        buffer_map[2] = b_offset
+        index = 3
+        max_index = self.led_count + 3
+        for offset in data:
+            if index >= max_index:
+                break
+            buffer_map[index] = offset
+            index += 1
+
+    @staticmethod
+    @micropython.viper
+    def _copy_external_buf(src:ptr8, dst:ptr8, bufmap:ptr16, led_count:int):
+        """
+        Copy the buffer directly into the intermediate work buffer.
+
+        bufmap contains is contains both the relative color position and the
+        offset for each led.
+
+          array('H', [
+            red offset,
+            green offset,
+            blue offset,
+            led 0 index,
+            led 1 index,
+            ...
+            led n index
+          ])
+        """
+        dst_index = 0
+        r_offset = bufmap[0]
+        g_offset = bufmap[1]
+        b_offset = bufmap[2]
+        for led_index in range(led_count):
+            src_index = bufmap[led_index+3]
+            dst[dst_index]   = src[src_index+g_offset]
+            dst[dst_index+1] = src[src_index+r_offset]
+            dst[dst_index+2] = src[src_index+b_offset]
+            dst_index += 3
+
+    def copy_external_buf(self, data):
+        """
+        Copy the buffer directly into the intermediate work buffer.
+
+        Source must be a one-dimensional buffer described by the buffer map.
+        """
+        self._copy_external_buf(data, self.work_buf, self.buffer_map, self.led_count)
+
     @micropython.native
     def update_buf(self, data, start=0):
         """
         Copy the buffer into the intermediate work buffer.
         """
         work_buf = self.work_buf
+        work_buf_len = self.work_buf_length
         index = start * 3
         for red, green, blue in data:
+            if index >= work_buf_len:
+                break
             work_buf[index] = green
             index += 1
             work_buf[index] = red
